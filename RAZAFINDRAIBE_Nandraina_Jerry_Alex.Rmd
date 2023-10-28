@@ -1,0 +1,261 @@
+---
+title: "Devoir à rendre"
+author: "RAZAFINDRAIBE Nandraina Jerry Alex"
+date: "2023-10-16"
+output: html_document
+---
+<!-- Nom et prenoms: RAZAFINDRAIBE Nandraina jerry Alex -->
+<!-- Numéro de carte d'étudiant: 43006898 -->
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Fouille de données en R
+### On considère les données Iris de Fisher
+
+1.On retire la colonne classe des données.
+
+```{r iris data.frame}
+data("iris")
+iris.data.frame <- iris[1:150,1:4]
+```
+
+2.La matrice du carré de la distance euclidienne entre les individus.
+
+```{r matrice carré de la distance}
+
+distance_matrix <- dist(iris.data.frame)
+square_distance_matrix <- as.matrix(distance_matrix)^2
+```
+
+3.Fonction silPartition qui calcule l'indice silhouette d’une partition donnée.
+
+```{r Fonction silPartion}
+#function pour calculer a(), i pour indiquer la classe où la variable appartienne
+a <- function(variable,i,distance_matrix,clusters_matrices){
+  somme <- 0
+  incre <- 0
+  n <- length(rownames(clusters_matrices[[i]]))
+  for (variable_a in 1:n) {
+    if(variable != variable_a) {
+      #matrice de distance distance_matrix
+      somme <- somme + distance_matrix[variable, variable_a]
+      incre <- incre + 1
+    }
+  }
+  #a(variable) = (1/incre)(somme de la distance dans Ci entre les autres valeurs et la valeur courant)
+  return((1/incre)*somme)
+}
+#function pour calculer b()
+b <- function(variable,k,i,clusters_matrices) {
+  somme <- 0
+  incre <- 0
+  b_vec <- 0
+  #j variable pour les classes voisins
+  for (j in 1:k) { 
+    #j pour parcourir les classes autre que la classe courante
+    if(j!=i) {     
+      n <- length(rownames(clusters_matrices[[j]]))
+      for (variable_j in 1:n) {
+        somme <- somme + distance_matrix[variable, variable_j]
+        incre <- incre + 1
+      }
+      #b(variable) dans les autres classes
+      b_vec[j] <- (1/incre)*somme 
+    }
+  }
+  #on prend le minimum de b
+  return(min(b_vec,na.rm = TRUE)) 
+}
+#fonction pour calculer silhouette d'un élément dans la classe courant
+sil <- function(variable,a,b) {
+  s <-0 
+  if(a<b){
+    s <- 1-(a/b)
+  } else 
+  {
+    s <- (b/a)-1
+  }
+  return(s)
+}
+
+SilPartition <- function(iris.data.frame, clustering_vector){
+  distance_matrix <- as.matrix(dist(iris.data.frame))
+  # Compter le nombre d'occurrences de chaque cluster
+  cluster_counts <- table(clustering_vector)
+  # Affecter le nombre de clusters
+  k <- length(cluster_counts)
+  clusters_matrices <- list()
+  for (cluster_id in 1:k) {
+    # Sélectionner les observations du cluster actuel
+    cluster <- iris.data.frame[clustering_vector == cluster_id, ]
+    # Transformer le cluster en une matrice
+    cluster_matrix <- as.matrix(cluster)
+    # Stocker la matrice du cluster dans la liste
+    clusters_matrices[[paste0("cluster", cluster_id)]] <- cluster_matrix
+  }
+  silPart <- 0
+  for (i in 1:k) {
+    somme_c <- 0
+    sil_class <- 0
+    n <- length(rownames(clusters_matrices[[i]]))
+    for (variable in 1:n) {
+      a_var <- a(variable = variable,i = i,distance_matrix = distance_matrix,clusters_matrices = clusters_matrices)
+      b_var <- b(variable = variable, k = k,i = i,clusters_matrices = clusters_matrices)
+      somme_c <- sil(variable = variable, a = a_var, b = b_var)
+    }
+    sil_class[i] <- (1/n)*somme_c #calcul de la silhouette pour chaque classe
+  }
+  
+  return ((1/k)*sum(sil_class,na.rm = TRUE)) #somme de la silhouette de chaque classe sur le nombre de classe
+}
+```
+
+4.Partitionnement de l’ensemble des individus en 3 classes par le K-Means direct.
+
+```{r Partitionnement avec le K-Means}
+# Spécifier le nombre de clusters (K)
+K <- 3
+# Appliquer l'algorithme K-means sur le data.frame
+kmeans_result <- kmeans(iris.data.frame, centers = K)
+# Créer des vecteurs pour chaque classe
+cluster1 <- iris.data.frame[kmeans_result$cluster == 1, ]
+cluster2 <- iris.data.frame[kmeans_result$cluster == 2, ]
+cluster3 <- iris.data.frame[kmeans_result$cluster == 3, ]
+```  
+
+5.Appliquons à la partition obtenue à la question (4) la fonction « silPartition » définie à la question
+(3).
+
+```{r Calcul silhouette à partir de la fonction silPartion}
+distance_matrix <- as.matrix(distance_matrix)
+silhouette <- SilPartition(iris.data.frame, kmeans_result$cluster)
+print(silhouette)
+```
+
+6. Définition d'une fonction nommée « inertieIntraPartition » qui calcule l’inertie intra-classe d’une partition donnée.
+
+```{r Inertie intra-classe WSS}
+#Inertie intraclasse
+inertieIntraPartition <- function(iris.data.frame, clustering_vector){
+  # Compter le nombre d'occurrences de chaque cluster
+  cluster_counts <- table(clustering_vector)
+  # Affecter le nombre de clusters
+  k <- length(cluster_counts)
+  clusters_matrices <- list()
+  for (cluster_id in 1:k) {
+    # Sélectionner les observations du cluster actuel
+    cluster <- iris.data.frame[clustering_vector == cluster_id, ]
+    # Transformer le cluster en une matrice
+    cluster_matrix <- as.matrix(cluster)
+    # Stocker la matrice du cluster dans la liste
+    clusters_matrices[[paste0("cluster", cluster_id)]] <- cluster_matrix
+  }
+  somme_intra <-0
+  # Calculer les centroïdes des clusters
+  cluster_centers <- tapply(iris.data.frame, clustering_vector, FUN = colMeans)
+  # Pour prendre une à une chaque classe
+  for (i in 1:k) { 
+    somme <- 0
+    n <- length(rownames(clusters_matrices[[i]]))
+    # Parcourir les éléments de chaque classe 
+    for (variable in 1:n) { 
+      somme <- somme + sum((clusters_matrices[[i]][variable,] - cluster_centers[[i]])^2)
+    }
+    somme_intra <- somme_intra + somme
+  }
+  
+  return(somme_intra)
+}
+```
+
+7. Appliquons à la partition obtenue à la question (4) la fonction « inertieIntraPartition » définie à la question (6).
+
+```{r Calcul inertieIntraClasse WSS}
+print(inertieIntraPartition(iris.data.frame, kmeans_result$cluster))
+```
+
+8. En utilisant la fonction « hclust », effectuer une classification ascendante hiérarchique de l’ensemble des individus par :
+(a) le lien simple ;
+(b) le lien moyen ;
+(c) le lien complet.
+
+```{r CAH}
+# Une CAH avec le lien simple
+cah_simple <- hclust(dist(iris.data.frame), method = "single")
+
+# Une CAH avec le lien moyen
+cah_moyen <- hclust(dist(iris.data.frame), method = "average")
+
+# Une CAH avec le lien complet
+cah_complet <- hclust(dist(iris.data.frame), method = "complete")
+```
+
+9. Définition une fonction nommée « sautMax » qui calcule le niveau de coupure correspondant au saut maximum de l’indice de niveau d’une hiérarchie indicée obtenue par « hclust »
+
+```{r Fonction sautMax}
+sautMax <- function(hclust_object) {
+  # Obtenir la hauteur (niveau) de chaque nœud dans la hiérarchie
+  heights <- hclust_object$height
+  # Calculer la différence entre les hauteurs adjacentes
+  height_diff <- diff(heights)
+  # Trouver l'indice du saut maximum (indice du maximum de la différence)
+  max_jump_index <- which.max(height_diff)
+  # Récupérer la hauteur (niveau) correspondant au saut maximum
+  max_jump_height <- heights[max_jump_index]
+  # Retourner la hauteur (niveau) du saut maximum
+  return(max_jump_height)
+}
+```
+
+10. Dans chacun des cas de la question (8), déterminons la partition correspondant au saut maximum de l’indice de niveau.
+ 
+*Pour la CAH avec le lien simple*
+```{r La partition obtenue avec le lien simple}
+niveau_coupure_simple <- sautMax(cah_simple)
+# Obtenir la partition correspondant au saut maximum
+partition_cah_simple <- cutree(cah_simple, h = niveau_coupure_simple)
+```
+*Pour la CAH avec le lien moyen*
+```{r La partition obtenue avec le lien moyen}
+niveau_coupure_moyen <- sautMax(cah_moyen)
+# Obtenir la partition correspondant au saut maximum
+partition_cah_moyen <- cutree(cah_moyen, h = niveau_coupure_moyen)
+```
+*Pour la CAH avec le lien complet*
+```{r La partition obtenue avec le lien complet}
+niveau_coupure_complet <- sautMax(cah_complet)
+# Obtenir la partition correspondant au saut maximum
+partition_cah_complet <- cutree(cah_complet, h = niveau_coupure_complet)
+```
+
+11. Calcul de l’indice silhouette de chacune des partitions obtenues à la question (10).
+
+*Pour le lien simple*
+```{r Calcul silhouette CAH lien simple}
+print(SilPartition(iris.data.frame = iris.data.frame, clustering_vector = partition_cah_simple))
+```
+*Pour le lien moyen*
+```{r Calcul silhouette CAH lien moyen}
+print(SilPartition(iris.data.frame = iris.data.frame, clustering_vector = partition_cah_moyen))
+```
+*Pour le lien complet*
+```{r Calcul silhouette CAH lien complet}
+print(SilPartition(iris.data.frame = iris.data.frame, clustering_vector = partition_cah_complet))
+```
+
+12. Calcul de l’inertie intra-classe de chacune des partitions obtenues à la question (10).
+
+*Pour le lien simple*
+```{r inertie intra-classe CAH lien simple}
+print(inertieIntraPartition(iris.data.frame = iris.data.frame, clustering_vector = partition_cah_simple))
+```
+*Pour le lien moyen*
+```{r inertie intra-classe CAH lien moyen}
+print(inertieIntraPartition(iris.data.frame = iris.data.frame, clustering_vector = partition_cah_moyen))
+```
+*Pour le lien complet*
+```{r inertie intra-classe CAH lien complet}
+print(inertieIntraPartition(iris.data.frame = iris.data.frame, clustering_vector = partition_cah_complet))
+```
